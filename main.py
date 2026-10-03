@@ -9,6 +9,19 @@ from terminaltables import AsciiTable
 HABR_URL = 'https://career.habr.com/api/frontend/vacancies'
 SUPERJOB_URL = 'https://api.superjob.ru/2.0/vacancies/'
 
+HABR_MOSCOW_LOCATION_ID = 'c_678'
+SUPERJOB_MOSCOW_TOWN_ID = 4
+PROGRAMMING_CATALOGUE_ID = 48
+VACANCIES_PER_PAGE = 100
+
+REQUEST_TIMEOUT = 30
+RETRY_ATTEMPTS = 5
+RETRY_DELAY = 2
+REQUEST_DELAY = 0.5
+
+SALARY_FROM_MULTIPLIER = 1.2
+SALARY_TO_MULTIPLIER = 0.8
+
 LANGUAGES = [
     'Python',
     'C',
@@ -27,10 +40,10 @@ def predict_salary(salary_from, salary_to):
         return (salary_from + salary_to) / 2
 
     if salary_from:
-        return salary_from * 1.2
+        return salary_from * SALARY_FROM_MULTIPLIER
 
     if salary_to:
-        return salary_to * 0.8
+        return salary_to * SALARY_TO_MULTIPLIER
 
     return None
 
@@ -75,25 +88,25 @@ def fetch_habr_vacancies(language):
 
         params = {
             'q': f'Программист {language}',
-            'locations[]': 'c_678',
+            'locations[]': HABR_MOSCOW_LOCATION_ID,
             'type': 'all',
             'page': page,
         }
 
-        for attempt in range(5):
+        for attempt in range(RETRY_ATTEMPTS):
             try:
                 response = requests.get(
                     HABR_URL,
                     params=params,
                     headers=headers,
-                    timeout=30,
+                    timeout=REQUEST_TIMEOUT,
                 )
                 response.raise_for_status()
                 break
             except requests.exceptions.RequestException:
-                if attempt == 4:
+                if attempt == RETRY_ATTEMPTS - 1:
                     raise
-                time.sleep(2)
+                time.sleep(RETRY_DELAY)
 
         data = response.json()
 
@@ -108,7 +121,7 @@ def fetch_habr_vacancies(language):
             break
 
         page += 1
-        time.sleep(0.5)
+        time.sleep(REQUEST_DELAY)
 
     return vacancies_found, all_vacancies
 
@@ -159,17 +172,17 @@ def fetch_superjob_vacancies(language, secret_key):
 
         params = {
             'keyword': f'Программист {language}',
-            'town': 4,
-            'catalogues': 48,
+            'town': SUPERJOB_MOSCOW_TOWN_ID,
+            'catalogues': PROGRAMMING_CATALOGUE_ID,
             'page': page,
-            'count': 100,
+            'count': VACANCIES_PER_PAGE,
         }
 
         response = requests.get(
             SUPERJOB_URL,
             headers=headers,
             params=params,
-            timeout=30,
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -184,7 +197,7 @@ def fetch_superjob_vacancies(language, secret_key):
             break
 
         page += 1
-        time.sleep(0.5)
+        time.sleep(REQUEST_DELAY)
 
     return vacancies_found, all_vacancies
 
@@ -254,10 +267,7 @@ def main():
     secret_key = os.getenv('SUPERJOB_SECRET_KEY')
 
     habr_statistics = get_habr_statistics()
-
-    superjob_statistics = get_superjob_statistics(
-        secret_key,
-    )
+    superjob_statistics = get_superjob_statistics(secret_key)
 
     print_statistics_table(
         habr_statistics,
